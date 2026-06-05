@@ -1,0 +1,161 @@
+"""
+- Full glitch: screen duplication + invert/rainbow, mouse shake, beeps, floating insults every 0.5 sec
+- Press F1 or Escape to stop
+"""
+
+import ctypes
+import sys
+import time
+import random
+import threading
+import tkinter as tk
+
+try:
+    from PIL import Image, ImageTk, ImageGrab
+except ImportError:
+    ctypes.windll.user32.MessageBoxW(0, "Pillow not installed.\nRun: pip install pillow", "Error", 0x10)
+    sys.exit(1)
+
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+VK_F1 = 0x70
+MB_YESNO = 0x04
+MB_ICONERROR = 0x10
+MB_ICONQUESTION = 0x20
+MB_ICONINFORMATION = 0x40
+MB_OK = 0x00
+
+SCREEN_WIDTH = user32.GetSystemMetrics(0)
+SCREEN_HEIGHT = user32.GetSystemMetrics(1)
+
+def message_box(text, title, flags):
+    return user32.MessageBoxW(0, text, title, flags)
+
+def is_f1_pressed():
+    return bool(user32.GetAsyncKeyState(VK_F1) & 0x8000)
+
+def transform_image(img):
+    img = img.convert("RGB")
+    w, h = img.size
+    pixels = img.load()
+    shift = random.randint(0, 255)
+    for y in range(h):
+        for x in range(w):
+            r, g, b = pixels[x, y]
+            r = (255 - r + shift) % 256
+            g = (255 - g + (shift * 2)) % 256
+            b = (255 - b + (shift * 3)) % 256
+            pixels[x, y] = (r, g, b)
+    return img
+
+stop_event = threading.Event()
+
+def shake_mouse():
+    while not stop_event.is_set():
+        x = random.randint(0, SCREEN_WIDTH)
+        y = random.randint(0, SCREEN_HEIGHT)
+        user32.SetCursorPos(x, y)
+        time.sleep(0.0005)
+
+class GlitchWindow:
+    def __init__(self):
+        self.root = None
+        self.running = False
+        self.after_id = None
+        self.last_insult_time = 0
+
+    def start(self):
+        self.root = tk.Tk()
+        self.root.attributes('-fullscreen', True)
+        self.root.attributes('-topmost', True)
+        self.root.configure(bg='black')
+        self.root.bind('<Key-F1>', lambda e: self.stop())
+        self.root.bind('<Escape>', lambda e: self.stop())
+        self.root.focus_set()
+        self.canvas = tk.Canvas(self.root, highlightthickness=0, bg='black')
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.running = True
+        self.loop()
+        self.root.mainloop()
+
+    def show_insult(self):
+        win = tk.Toplevel(self.root)
+        win.overrideredirect(True)
+        win.attributes('-topmost', True)
+        x = random.randint(0, SCREEN_WIDTH - 300)
+        y = random.randint(0, SCREEN_HEIGHT - 100)
+        win.geometry(f"300x100+{x}+{y}")
+        win.configure(bg='black')
+        frame = tk.Frame(win, bg='red', bd=2, relief='solid')
+        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        label = tk.Label(frame, text="GET FUCKED HAHA", font=('Arial', 14, 'bold'), fg='white', bg='red')
+        label.pack(expand=True)
+        win.after(1000, win.destroy)
+
+    def loop(self):
+        if not self.running:
+            return
+        try:
+            full = ImageGrab.grab(all_screens=True)
+            w, h = full.size
+            full_trans = transform_image(full)
+            scale = 0.6
+            small = full.resize((int(w*scale), int(h*scale)), Image.LANCZOS)
+            small_trans = transform_image(small)
+            self.full_img = ImageTk.PhotoImage(full_trans)
+            self.small_img = ImageTk.PhotoImage(small_trans)
+            self.canvas.delete("all")
+            cw = self.root.winfo_width()
+            ch = self.root.winfo_height()
+            if cw < 10 or ch < 10:
+                cw, ch = w, h
+            self.canvas.create_image(cw//2, ch//2, image=self.full_img, anchor='center')
+            self.canvas.create_image(cw//2, ch//2, image=self.small_img, anchor='center')
+        except Exception:
+            pass
+
+        now = time.time()
+        if now - self.last_insult_time >= 0.5:
+            self.last_insult_time = now
+            self.show_insult()
+
+        if random.random() < 0.2:
+            kernel32.Beep(random.randint(400,2000), random.randint(20,80))
+
+        self.after_id = self.root.after(50, self.loop)
+
+    def stop(self):
+        self.running = False
+        if self.after_id:
+            self.root.after_cancel(self.after_id)
+        self.root.destroy()
+        sys.exit(0)
+
+def main():
+    # Disclaimer (error icon, Yes/No)
+    resp_disclaimer = message_box(
+        "DISCLAIMER!: this file is only visual and does not harm your pc!\nPress F1 TO STOP!\n\nDo you want to continue?",
+        "WARNING",
+        MB_YESNO | MB_ICONERROR
+    )
+    if resp_disclaimer != 6:  # IDYES = 6
+        sys.exit(0)
+
+    # Main question
+    resp_main = message_box(
+        "Do u wanna test the visual glitching",
+        "Question",
+        MB_YESNO | MB_ICONQUESTION
+    )
+    if resp_main == 6:
+        mouse_thread = threading.Thread(target=shake_mouse, daemon=True)
+        mouse_thread.start()
+        glitch = GlitchWindow()
+        glitch.start()
+        stop_event.set()
+    else:
+        message_box("aww im saddddd:(", "Response", MB_OK | MB_ICONINFORMATION)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
