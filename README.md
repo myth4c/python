@@ -1,3 +1,3 @@
-# python
-testing and stuff xdd
-- Everything in this repo is only educational purposes only!
+# Crosshair Thingy
+
+- very very cool, tbh looks like a cheat but its not so use it
